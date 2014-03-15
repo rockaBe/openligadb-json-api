@@ -10,39 +10,50 @@ class String
   end
 end
 
-Savon.configure do |config|
-  config.log_level = :error      # changing the log level
-end
-
 class OpenLigaDB
   def initialize
-    @client = Savon::Client.new "http://www.openligadb.de/Webservices/Sportsdata.asmx?wsdl"
+    @client = Savon.client(
+      wsdl: "http://www.openligadb.de/Webservices/Sportsdata.asmx?wsdl", log_level: :error
+    )
   end
 
+  # sends request to WSDL endpoint
+  # @params
+  # action:   wsdl operation name as underscored string
+  # params:   params required for wsdl operation to work
   def request(action, params)
-    action = "get_#{action}".gsub(/id$/, 'iD')
-
-    response = @client.request :wsdl, action do
-      soap.body = {}
-      params.each do |key, value|
-        unless key == :action
-          key = key.lower_camelcase
-          unless ["get_next_match_by_league_team", "get_last_match_by_league_team"].include?(action)
-            key = key.gsub(/Id$/, 'ID').gsub(/Id_1$/, 'ID1').gsub(/Id_2$/, 'ID2')
-          end
-          soap.body[key] = value
-        end
+    action = "get_#{action}"
+    
+    message = params.each_with_object({}) do |(key, value), msg|
+      key = key.lower_camelcase
+      unless ["get_next_match_by_league_team", "get_last_match_by_league_team"].include?(action)
+        key = key.gsub(/Id/, 'ID')
       end
+      msg[key] = value
     end
-
-    hash = response.to_hash
-    hash = hash[hash.keys.first]
-    hash.delete :@xmlns
-    result = hash[hash.keys.first]
-    result = {:last_change_date => result} if result.class == DateTime
-    result
+    response = @client.call(action.to_sym, message: message)
+    result = format_response(response, action)
   end
 
   private
+
+  # @params
+  # response: Savon::Response object
+  # @returns
+  # a cleaned Hash of data elements (including root_object, if available)
+  def format_response(response, action)
+    hash = response.body
+    hash = hash[hash.keys.first]
+    hash.delete :@xmlns
+    # needed to always return a hash and not just the bare result
+    # to make the method consistent
+    unless ['get_current_group_order_id'].include? action
+      result = hash[hash.keys.first] 
+    else
+      result = hash
+    end
+    result = {:last_change_date => result} if result.class == DateTime
+    result
+  end
 
 end

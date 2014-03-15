@@ -5,7 +5,7 @@
 
 source "http://rubygems.org"
 
-gem "savon"
+gem "savon", '~> 2.3'
 gem "sinatra"
 gem "haml"
 gem "sass"
